@@ -1578,8 +1578,14 @@ async function publishNode({ body, kind, wave_id, handle, threads }) {
   };
   const { data, error } = await state.client.from('nodes').insert(payload).select().single();
   if (error) {
-    console.error(error);
-    toast('could not release');
+    console.error('[tideglass] publish error:', error);
+    const hint =
+      /row-level security|violates/i.test(error.message) ? 'rls blocked — check policies & anon auth' :
+      /foreign key/i.test(error.message)                ? 'wave_id not in waves table — run schema.sql' :
+      /relation.*does not exist/i.test(error.message)   ? 'nodes table missing — run schema.sql' :
+      /check constraint/i.test(error.message)           ? 'body must be 10–600 chars' :
+      (error.message || 'unknown error').slice(0, 80);
+    toast(hint);
     return null;
   }
   // Add local-only fields for now (connects live in the UI; persist later)
