@@ -1579,10 +1579,7 @@ function render() {
   if (state.view === 'graph') main.innerHTML = graphView();
   if (state.view === 'orbit') main.innerHTML = orbitView();
 
-  removeOverlay('detailOverlay');
-  removeOverlay('composeOverlay');
-  removeOverlay('ethicsOverlay');
-  removeOverlay('breathOverlay');
+  removeAllOverlays();
 
   if (state.breathOpen)         renderBreath();
   else if (state.view === 'compose') renderCompose();
@@ -1604,6 +1601,12 @@ function render() {
 }
 
 function removeOverlay(id) { document.getElementById(id)?.remove(); }
+
+/* Bulletproof: purge ALL overlay elements by class — handles duplicate IDs */
+function removeAllOverlays() {
+  ['.detail', '.compose', '.ethics-sheet', '.breath-gate']
+    .forEach(sel => document.querySelectorAll(sel).forEach(el => el.remove()));
+}
 
 function updatePaletteFromState() {
   // User override wins — 'auto' falls through to content-based selection
@@ -1788,6 +1791,7 @@ function nodePreviewHTML(n, w, idx, total) {
    NODE DETAIL
    ============================================================ */
 function renderDetail() {
+  document.querySelectorAll('.detail').forEach(el => el.remove());
   const n = state.nodesMap[state.detailId];
   if (!n) { state.detailId = null; return; }
 
@@ -1984,6 +1988,10 @@ const composeState = {
 };
 
 function renderCompose() {
+  // Purge ALL compose overlays (duplicate IDs accumulate when switching
+  // waves/kinds re-renders this view without closing the previous one)
+  document.querySelectorAll('.compose').forEach(el => el.remove());
+
   if (!composeState.wave_id && state.waves[0]) composeState.wave_id = state.waves[0].id;
 
   const kinds = [
@@ -2135,6 +2143,14 @@ async function handleRelease() {
     state.expandedWaves.add(node.wave_id);
     toast('released into the tide');
     state.view = 'tide';
+    // Belt-and-suspenders: blur any focused textarea/input and explicitly
+    // purge overlay elements before render — guards against any stale overlays
+    // that somehow slipped past normal cleanup (focus-stuck textareas can
+    // block clicks on iOS in rare cases).
+    if (document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+    removeAllOverlays();
     render();
   } else {
     release.disabled = false;
@@ -2143,8 +2159,8 @@ async function handleRelease() {
 }
 
 function closeCompose() {
+  document.querySelectorAll('.compose').forEach(el => el.remove());
   if (state.view === 'compose') { state.view = 'tide'; render(); }
-  else removeOverlay('composeOverlay');
 }
 
 /* ============================================================
@@ -2168,6 +2184,7 @@ function openComposeWithBreath() {
 }
 
 function renderBreath() {
+  document.querySelectorAll('.breath-gate').forEach(el => el.remove());
   const overlay = document.createElement('div');
   overlay.className = 'breath-gate';
   overlay.id = 'breathOverlay';
@@ -2429,6 +2446,7 @@ function orbitRowHTML(n) {
    ETHICS SHEET
    ============================================================ */
 function renderEthics() {
+  document.querySelectorAll('.ethics-sheet').forEach(el => el.remove());
   const overlay = document.createElement('div');
   overlay.className = 'ethics-sheet';
   overlay.id = 'ethicsOverlay';
