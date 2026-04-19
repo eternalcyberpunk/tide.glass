@@ -954,6 +954,48 @@ body {
   letter-spacing: 1px; text-transform: uppercase; margin-top: 6px;
 }
 
+/* PALETTE SWITCHER */
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 0 16px;
+}
+.palette-chip {
+  background: transparent; border: none; cursor: pointer; padding: 0;
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--mute);
+  transition: color 0.25s;
+}
+.palette-chip:hover { color: var(--ink); }
+.palette-chip.active { color: var(--ink); }
+.palette-chip .swatch {
+  width: 100%; aspect-ratio: 1;
+  border-radius: 14px;
+  border: 1px solid var(--dim);
+  margin-bottom: 8px;
+  filter: saturate(1.25);
+  transition: border-color 0.25s, box-shadow 0.3s, transform 0.25s;
+  position: relative; overflow: hidden;
+}
+.palette-chip:hover .swatch {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+.palette-chip.active .swatch {
+  border-color: var(--ink);
+  box-shadow: 0 0 18px var(--accent), 0 0 4px rgba(255,255,255,0.3) inset;
+}
+.palette-chip.auto .swatch {
+  background: transparent;
+  border-style: dashed;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-style: italic;
+  font-size: 16px; color: var(--mute);
+}
+.palette-chip.auto.active .swatch { color: var(--ink); }
+
 /* ECHO — resurfaced old holds */
 .echo-card {
   margin: 10px 16px; padding: 16px;
@@ -1276,6 +1318,28 @@ const VALID_PALETTES = new Set([
   'abyssal','gloam','nacre','cathedral','ember','drift','static','prism','moss','rust'
 ]);
 
+/* Swatches — small-scale preview gradients for the chips */
+const PALETTE_SWATCHES = {
+  abyssal:   'conic-gradient(from 140deg, #6be0ff, #a389ff, #ff7ac8, #ffd36b, #6effc7, #6be0ff)',
+  gloam:     'conic-gradient(from 200deg, #8e7dd1, #b8a8d6, #d4b8e5, #e8c8d5, #8e7dd1)',
+  nacre:     'conic-gradient(from 60deg, #ffe0ec, #d4e8ff, #e8d4ff, #fff0c8, #c8f0e0, #ffe0ec)',
+  cathedral: 'conic-gradient(from 100deg, #2a5fa8, #8b2d3a, #c48a2d, #4a7a3d, #6a3d8a, #2a5fa8)',
+  ember:     'conic-gradient(from 320deg, #ff6b35, #c82a4f, #6f1d3a, #ffb870, #ff6b35)',
+  drift:     'conic-gradient(from 180deg, #a8d5f0, #c8e0f8, #e8f0ff, #d8e8ff, #a8d5f0)',
+  static:    'conic-gradient(from 45deg, #ff40b0, #40e8ff, #ffe040, #ff40b0)',
+};
+
+const PALETTE_CHOICES = [
+  { key: 'auto',      label: 'auto' },
+  { key: 'abyssal',   label: 'abyssal' },
+  { key: 'gloam',     label: 'gloam' },
+  { key: 'nacre',     label: 'nacre' },
+  { key: 'cathedral', label: 'cathedral' },
+  { key: 'ember',     label: 'ember' },
+  { key: 'drift',     label: 'drift' },
+  { key: 'static',    label: 'static' },
+];
+
 function paletteForWave(w) {
   if (!w) return 'abyssal';
   if (VALID_PALETTES.has(w.palette_bias)) return w.palette_bias;
@@ -1297,6 +1361,7 @@ const LS_JOINED     = 'tideglass.joined.v1';
 const LS_MARG       = 'tideglass.margin.v1';       // { [nodeId]: text }
 const LS_LAST_POST  = 'tideglass.lastPost.v1';     // YYYY-MM-DD
 const LS_BREATH_DONE= 'tideglass.breathDoneToday.v1';
+const LS_USER_PALETTE = 'tideglass.userPalette.v1';  // 'auto' or a palette key
 
 const state = {
   client: null,
@@ -1319,6 +1384,7 @@ const state = {
   error: null,
   sessionStart: Date.now(),
   joinedAt: loadJoined(),
+  userPalette: localStorage.getItem(LS_USER_PALETTE) || 'auto',
 };
 
 function loadObj(k) { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch { return {}; } }
@@ -1540,7 +1606,12 @@ function render() {
 function removeOverlay(id) { document.getElementById(id)?.remove(); }
 
 function updatePaletteFromState() {
-  // detail > expanded wave > default
+  // User override wins — 'auto' falls through to content-based selection
+  if (state.userPalette && state.userPalette !== 'auto') {
+    applyPalette(state.userPalette);
+    return;
+  }
+  // detail > compose > expanded wave > default
   if (state.detailId) {
     const n = state.nodesMap[state.detailId];
     const w = state.waves.find(x => x.id === n?.wave_id);
@@ -1553,12 +1624,21 @@ function updatePaletteFromState() {
     return;
   }
   if (state.view === 'tide' && state.expandedWaves.size) {
-    // use the first expanded wave
     for (const w of state.waves) {
       if (state.expandedWaves.has(w.id)) { applyPalette(paletteForWave(w)); return; }
     }
   }
   applyPalette('abyssal');
+}
+
+function setUserPalette(key) {
+  state.userPalette = key;
+  try { localStorage.setItem(LS_USER_PALETTE, key); } catch {}
+  updatePaletteFromState();
+  // Update active chip visually without re-rendering whole view
+  document.querySelectorAll('.palette-chip').forEach(el => {
+    el.classList.toggle('active', el.dataset.palette === key);
+  });
 }
 
 /* ============================================================
@@ -2308,6 +2388,20 @@ function orbitView() {
         : dropList.map(orbitRowHTML).join('')}
 
       <div class="section-head">
+        <div class="label">palette</div>
+        <div class="sub">${state.userPalette === 'auto' ? 'follows the current' : 'locked · tap auto to release'}</div>
+      </div>
+      <div class="palette-grid">
+        ${PALETTE_CHOICES.map(p => `
+          <button class="palette-chip ${p.key === 'auto' ? 'auto' : ''} ${state.userPalette === p.key ? 'active' : ''}"
+                  data-palette="${esc(p.key)}">
+            <div class="swatch" style="${p.key === 'auto' ? '' : `background: ${PALETTE_SWATCHES[p.key]}`}">${p.key === 'auto' ? '◌' : ''}</div>
+            <div>${esc(p.label)}</div>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="section-head">
         <div class="label">care · this session</div>
         <div class="sub">honest numbers, no guilt</div>
       </div>
@@ -2402,6 +2496,15 @@ const mainEl = document.getElementById('main');
 mainEl.addEventListener('click', e => {
   const eth = e.target.closest('#openEthics');
   if (eth) { state.ethicsOpen = true; render(); return; }
+  const chip = e.target.closest('[data-palette]');
+  if (chip) {
+    setUserPalette(chip.dataset.palette);
+    // update the "locked · tap auto to release" sublabel
+    const sub = chip.closest('.orbit-wrap')?.querySelector('.section-head .sub');
+    // re-render to refresh the sub-label — lightweight
+    render();
+    return;
+  }
   const wtoggle = e.target.closest('[data-toggle-wave]');
   if (wtoggle) {
     const id = wtoggle.dataset.toggleWave;
