@@ -2514,12 +2514,9 @@ const mainEl = document.getElementById('main');
 mainEl.addEventListener('click', e => {
   const eth = e.target.closest('#openEthics');
   if (eth) { state.ethicsOpen = true; render(); return; }
-  const chip = e.target.closest('[data-palette]');
+  const chip = e.target.closest('.palette-chip');
   if (chip) {
     setUserPalette(chip.dataset.palette);
-    // update the "locked · tap auto to release" sublabel
-    const sub = chip.closest('.orbit-wrap')?.querySelector('.section-head .sub');
-    // re-render to refresh the sub-label — lightweight
     render();
     return;
   }
